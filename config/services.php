@@ -28,6 +28,11 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'txtbox' => [
+        'url' => env('TXTBOX_URL', 'https://ws-v2.txtbox.com/messaging/v1/sms/push'),
+        'api_key' => env('TXTBOX_API_KEY'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
