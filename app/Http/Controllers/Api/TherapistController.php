@@ -30,7 +30,7 @@ class TherapistController extends Controller
      */
     public function show(string $uuid): JsonResponse
     {
-        $therapist = Provider::with(['user', 'therapistProfile'])
+        $therapist = Provider::with(['user', 'therapistProfile', 'services'])
             ->where('uuid', $uuid)
             ->where('type', 'therapist')
             ->where('verification_status', 'verified')

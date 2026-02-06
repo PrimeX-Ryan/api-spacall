@@ -23,106 +23,100 @@ Check if the user exists and decide the next step.
   }
   ```
 
-### 2. Path A: New User (Registration)
-
-#### 2.1 Verify OTP
-Confirm the code sent to the mobile number.
-- **POST** `/auth/verify-otp`
-- **Body**: `{ "mobile_number": "09123456789", "otp": "123456" }`
-- **Sample Response**:
-  ```json
-  {
-      "message": "OTP verified successfully",
-      "next_step": "registration"
-  }
-  ```
-
-#### 2.2 Register Profile & Set PIN
-- **POST** `/auth/register-profile`
-- **Method**: `POST` (Multipart Form-Data)
-- **Body**: `first_name`, `last_name`, `gender`, `date_of_birth`, `profile_photo`, `pin` (6 digits), `mobile_number`
-- **Sample Response**:
-  ```json
-  {
-      "message": "Profile registered successfully",
-      "token": "1|abc123token...",
-      "user": { "id": 1, "first_name": "John", "last_name": "Doe", ... }
-  }
-  ```
-
-### 3. Path B: Returning User (Login)
-
-#### 3.1 Login with PIN
-- **POST** `/auth/login-pin`
-- **Body**: `{ "mobile_number": "09123456789", "pin": "112233" }`
-- **Sample Response**:
-  ```json
-  {
-      "message": "Login successful",
-      "token": "2|xyz456token...",
-      "user": { "id": 1, "first_name": "John", "last_name": "Doe", ... }
-  }
-  ```
-
 ---
 
-## 🟢 Therapist (Protected)
+## 🟢 Client Booking Journey (Book Now)
 *Requires Bearer Token in Header*
 
-### 1. List All Therapists
-- **URL**: `GET /therapists`
+### Step 1: Discover Available Therapists
+Find therapists who are currently online and available.
+- **URL**: `GET /bookings/available-therapists`
 - **Sample Response**:
   ```json
   {
       "therapists": [
           {
-              "uuid": "550e8400-e29b-41d4-a716-446655440000",
-              "user": { "first_name": "John", "last_name": "Doe", "profile_photo_url": "..." },
-              "therapist_profile": { "base_rate": 800, "specializations": ["Swedish"] }
+              "id": 1,
+              "name": "John Doe",
+              "services": [
+                  { "id": 1, "name": "Swedish Massage" },
+                  { "id": 3, "name": "Organic Facial" }
+              ]
+          },
+          {
+              "id": 2,
+              "name": "Maria Garcia",
+              "services": [
+                  { "id": 3, "name": "Organic Facial" },
+                  { "id": 5, "name": "Tele-Consultation" }
+              ]
           }
       ]
   }
   ```
 
-### 2. View Single Therapist
-- **URL**: `GET /therapists/{uuid}`
+### Step 2: Immediate Booking
+Create a booking for the chosen therapist and service at the client's current location.
+- **URL**: `POST /bookings`
+- **Body**:
+  ```json
+  {
+      "service_id": 3,
+      "provider_id": 2,
+      "address": "Unit 102, Green Residence, Taft Ave",
+      "latitude": 14.5648,
+      "longitude": 120.9932,
+      "city": "Manila",
+      "province": "Metro Manila",
+      "customer_notes": "Ring the doorbell twice."
+  }
+  ```
+- **Response**: Returns the `booking_id` for tracking.
+
+### Step 3: Real-Time Tracking
+Track the therapist's status and live location as they head to your location.
+- **URL**: `GET /bookings/{id}/track`
 - **Sample Response**:
   ```json
   {
-      "therapist": {
-          "uuid": "...",
-          "total_earnings": 1500,
-          "average_rating": 4.8,
-          "user": { ... },
-          "therapist_profile": {
-              "bio": "Expert in Swedish massage...",
-              "specializations": ["Swedish", "Deep Tissue"],
-              "base_rate": 800,
-              "default_schedule": { ... }
-          }
-      }
+      "booking_status": "en_route",
+      "therapist_location": { "latitude": 14.5600, "longitude": 120.9900 },
+      "eta_minutes": 8
   }
   ```
 
-### 3. View My Profile
-- **URL**: `GET /therapist/profile`
-- **Sample Response**: Same as "View Single Therapist" but for the authenticated user.
+### Step 4: Feedback (Post-Service)
+Rate and review the therapist once the status is `completed`.
+- **URL**: `POST /bookings/{id}/reviews`
+- **Body**: `{ "rating": 5, "body": "She was very professional and punctual!" }`
 
 ---
 
-## 🟣 Services (Protected)
+## 🟠 Therapist Management (Protected)
+
+### 1. Update My Status
+Therapists update their progress through the booking.
+- **URL**: `PATCH /bookings/{id}/status`
+- **Body**: `{ "status": "arrived" }`
+
+### 2. View My Profile
+- **URL**: `GET /therapist/profile`
+
+---
+
+## 🟣 Services & Categories
 *Requires Bearer Token in Header*
 
-### 1. List Services
+### 1. List All Services
 - **URL**: `GET /services`
 - **Sample Response**:
   ```json
   {
       "categories": [
           {
-              "name": "Wellness & Spa",
+              "name": "Massage",
               "services": [
-                  { "name": "Swedish Massage", "base_price": 800, "slug": "swedish-massage" }
+                  { "name": "Swedish Massage", "slug": "swedish-massage" }
               ]
           }
       ]

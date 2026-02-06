@@ -13,7 +13,53 @@ class Booking extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['booking_number','customer_id','provider_id','service_id','booking_type','schedule_type','customer_tier','assignment_type','scheduled_at','duration_minutes','status','service_price','total_amount'];
+    protected $fillable = [
+        'booking_number',
+        'customer_id',
+        'provider_id',
+        'service_id',
+        'booking_type',
+        'schedule_type',
+        'customer_tier',
+        'assignment_type',
+        'scheduled_at',
+        'duration_minutes',
+        'status',
+        'accepted_at',
+        'started_at',
+        'completed_at',
+        'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
+        'cancellation_fee',
+        'service_price',
+        'distance_km',
+        'distance_surcharge',
+        'subtotal',
+        'platform_fee',
+        'promo_discount',
+        'total_amount',
+        'payment_method',
+        'payment_status',
+        'customer_notes',
+        'provider_notes',
+    ];
+
+    protected $casts = [
+        'scheduled_at' => 'datetime',
+        'accepted_at' => 'datetime',
+        'started_at' => 'datetime',
+        'completed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+        'service_price' => 'decimal:2',
+        'distance_km' => 'decimal:2',
+        'distance_surcharge' => 'decimal:2',
+        'subtotal' => 'decimal:2',
+        'platform_fee' => 'decimal:2',
+        'promo_discount' => 'decimal:2',
+        'total_amount' => 'decimal:2',
+        'cancellation_fee' => 'decimal:2',
+    ];
 
     public function customer(): BelongsTo { return $this->belongsTo(User::class, 'customer_id'); }
     public function provider(): BelongsTo { return $this->belongsTo(Provider::class, 'provider_id'); }

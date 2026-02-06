@@ -81,6 +81,15 @@ class TherapistSeeder extends Seeder
                     'friday' => ['09:00', '18:00'],
                 ],
             ]);
+
+            // Assign services to therapist
+            $services = \App\Models\Service::inRandomOrder()->take(rand(2, 4))->get();
+            foreach ($services as $service) {
+                $provider->services()->attach($service->id, [
+                    'price' => $service->base_price + rand(-100, 200),
+                    'is_available' => true
+                ]);
+            }
         }
     }
 }
