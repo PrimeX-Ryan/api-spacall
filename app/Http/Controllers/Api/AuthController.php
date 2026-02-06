@@ -11,6 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 
 class AuthController extends Controller
 {
@@ -22,9 +24,10 @@ class AuthController extends Controller
     }
 
     /**
-     * Step 1: Register with mobile number and send OTP.
+     * Step 1: Initial Entry.
+     * Checks if user exists. If yes, go to PIN login. If no, send OTP for registration.
      */
-    public function register(Request $request): JsonResponse
+    public function loginEntry(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'mobile_number' => 'required|string',
@@ -35,10 +38,21 @@ class AuthController extends Controller
         }
 
         $mobileNumber = $request->mobile_number;
+        $user = User::where('mobile_number', $mobileNumber)->first();
+
+        // Path B: Returning User
+        if ($user && $user->is_verified && !empty($user->pin_hash)) {
+            return response()->json([
+                'status' => 'existing_user',
+                'next_step' => 'pin_login',
+                'message' => 'Welcome back! Please enter your PIN.'
+            ]);
+        }
+
+        // Path A: New User (or unverified/no pin) - Trigger OTP
         $otpCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $expiresAt = Carbon::now()->addMinutes(5);
 
-        // Save OTP
         Otp::create([
             'mobile_number' => $mobileNumber,
             'otp_code' => $otpCode,
@@ -46,16 +60,14 @@ class AuthController extends Controller
             'used' => false,
         ]);
 
-        // Send via SMS
         $message = "Your 6-digit OTP for Spacall is: {$otpCode}. It will expire in 5 minutes.";
-        $sent = $this->smsService->sendSms($mobileNumber, $message);
+        $this->smsService->sendSms($mobileNumber, $message);
 
-        if (!$sent) {
-            // For development/demo, we might still want to proceed or return error
-            // return response()->json(['message' => 'Failed to send OTP SMS'], 500);
-        }
-
-        return response()->json(['message' => 'OTP sent successfully']);
+        return response()->json([
+            'status' => 'new_user',
+            'next_step' => 'otp_verification',
+            'message' => 'OTP sent successfully'
+        ]);
     }
 
     /**
@@ -83,56 +95,73 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid or expired OTP'], 400);
         }
 
-        // Mark as used
         $otpRecord->update(['used' => true]);
 
-        // Create or Update User
-        $user = User::firstOrCreate(
-            ['mobile_number' => $request->mobile_number],
-            ['is_verified' => true]
-        );
-
-        if (!$user->is_verified) {
-            $user->update(['is_verified' => true]);
-        }
-
-        return response()->json(['message' => 'OTP verified, set your PIN']);
+        // Just mark mobile as verified in session/response context
+        // The actual user creation happens in registerProfile
+        return response()->json([
+            'message' => 'OTP verified',
+            'next_step' => 'registration'
+        ]);
     }
 
     /**
-     * Step 3: Set PIN.
+     * Step 3: Register profile + set PIN.
      */
-    public function setPin(Request $request): JsonResponse
+    public function registerProfile(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'mobile_number' => 'required|string',
-            'pin' => 'required|string|size:6', // Assuming 6-digit PIN
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'gender' => 'required|in:male,female,other,prefer_not_to_say',
+            'date_of_birth' => 'required|date',
+            'pin' => 'required|string|size:6',
+            'profile_photo' => 'nullable|image|max:2048',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = User::where('mobile_number', $request->mobile_number)->first();
+        // Ensure OTP was verified (simple check for demo/mvp, can use signed tokens in real prod)
+        $otpVerified = Otp::where('mobile_number', $request->mobile_number)
+            ->where('used', true)
+            ->where('updated_at', '>', Carbon::now()->subMinutes(15))
+            ->exists();
 
-        if (!$user || !$user->is_verified) {
-            return response()->json(['message' => 'User not verified'], 403);
+        if (!$otpVerified) {
+            return response()->json(['message' => 'Mobile number not verified by OTP'], 403);
         }
 
-        $user->update([
-            'pin_hash' => Hash::make($request->pin)
-        ]);
+        $user = User::updateOrCreate(
+            ['mobile_number' => $request->mobile_number],
+            [
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'gender' => $request->gender,
+                'date_of_birth' => $request->date_of_birth,
+                'pin_hash' => Hash::make($request->pin),
+                'is_verified' => true
+            ]
+        );
+
+        if ($request->hasFile('profile_photo')) {
+            $path = $request->file('profile_photo')->store('profile_photos', 'public');
+            $user->update(['profile_photo_url' => Storage::url($path)]);
+        }
 
         $token = $user->createToken('wallet-token')->plainTextToken;
 
         return response()->json([
+            'message' => 'Registration successful',
             'token' => $token,
             'user' => $user
         ]);
     }
 
     /**
-     * Step 4: Login with PIN.
+     * Secure Login with PIN.
      */
     public function loginPin(Request $request): JsonResponse
     {
@@ -148,11 +177,7 @@ class AuthController extends Controller
         $user = User::where('mobile_number', $request->mobile_number)->first();
 
         if (!$user || !Hash::check($request->pin, $user->pin_hash)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        if (!$user->is_verified) {
-            return response()->json(['message' => 'User not verified'], 403);
+            return response()->json(['message' => 'Invalid PIN'], 401);
         }
 
         $token = $user->createToken('wallet-token')->plainTextToken;
@@ -161,5 +186,73 @@ class AuthController extends Controller
             'token' => $token,
             'user' => $user
         ]);
+    }
+
+    /**
+     * Forgot PIN: Send OTP to reset.
+     */
+    public function forgotPin(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'mobile_number' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $mobileNumber = $request->mobile_number;
+        $user = User::where('mobile_number', $mobileNumber)->first();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        // Trigger OTP
+        $otpCode = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        Otp::create([
+            'mobile_number' => $mobileNumber,
+            'otp_code' => $otpCode,
+            'expires_at' => Carbon::now()->addMinutes(5),
+            'used' => false,
+        ]);
+
+        $this->smsService->sendSms($mobileNumber, "Your PIN reset code is: {$otpCode}");
+
+        return response()->json(['message' => 'Reset code sent successfully']);
+    }
+
+    /**
+     * Reset PIN using OTP.
+     */
+    public function resetPin(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'mobile_number' => 'required|string',
+            'otp' => 'required|string|size:6',
+            'new_pin' => 'required|string|size:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $otpRecord = Otp::where('mobile_number', $request->mobile_number)
+            ->where('otp_code', $request->otp)
+            ->where('used', false)
+            ->where('expires_at', '>', Carbon::now())
+            ->latest()
+            ->first();
+
+        if (!$otpRecord) {
+            return response()->json(['message' => 'Invalid or expired OTP'], 400);
+        }
+
+        $otpRecord->update(['used' => true]);
+
+        $user = User::where('mobile_number', $request->mobile_number)->first();
+        $user->update(['pin_hash' => Hash::make($request->new_pin)]);
+
+        return response()->json(['message' => 'PIN reset successful']);
     }
 }

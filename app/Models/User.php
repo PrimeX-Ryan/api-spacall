@@ -31,6 +31,11 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'mobile_number',
+        'first_name',
+        'last_name',
+        'gender',
+        'date_of_birth',
+        'profile_photo_url',
         'pin_hash',
         'is_verified',
     ];
@@ -52,6 +57,7 @@ class User extends Authenticatable
      */
     protected $casts = [
         'is_verified' => 'boolean',
+        'date_of_birth' => 'date',
     ];
 
     /**

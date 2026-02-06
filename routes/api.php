@@ -10,8 +10,10 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::prefix('auth')->group(function () {
-    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:3,1'); // Rate limit OTP
+    Route::post('/entry', [AuthController::class, 'loginEntry']);
     Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
-    Route::post('/set-pin', [AuthController::class, 'setPin']);
+    Route::post('/register-profile', [AuthController::class, 'registerProfile']);
     Route::post('/login-pin', [AuthController::class, 'loginPin']);
+    Route::post('/forgot-pin', [AuthController::class, 'forgotPin']);
+    Route::post('/reset-pin', [AuthController::class, 'resetPin']);
 });
