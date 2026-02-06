@@ -15,17 +15,54 @@ use Illuminate\Support\Facades\Validator;
 class BookingController extends Controller
 {
     /**
+     * List user's bookings (Client or Therapist).
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        
+        $query = Booking::with(['provider.user', 'service', 'location']);
+
+        if ($user->role === 'therapist') {
+            $provider = $user->providers()->first();
+            $query->where('provider_id', $provider->id);
+        } else {
+            $query->where('customer_id', $user->id);
+        }
+
+        $bookings = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'bookings' => $bookings
+        ]);
+    }
+
+    /**
      * List therapists available for immediate booking.
      */
     public function availableTherapists(Request $request): JsonResponse
     {
         try {
-            $therapists = Provider::with(['user', 'therapistProfile', 'services'])
+            $lat = $request->query('latitude');
+            $lng = $request->query('longitude');
+            $radius = $request->query('radius', 10); // Default 10km
+
+            $query = Provider::with(['user', 'therapistProfile', 'services'])
                 ->where('type', 'therapist')
                 ->where('is_available', true)
                 ->where('verification_status', 'verified')
-                ->where('is_active', true)
-                ->get();
+                ->where('is_active', true);
+
+            // Simple distance calculation if coords provided
+            if ($lat && $lng) {
+                // This is a simplified Haversine for performance
+                // In production with thousands of providers, use PostGIS 'ST_Distance'
+                $query->whereHas('therapistProfile', function ($q) use ($lat, $lng, $radius) {
+                    $q->whereRaw("(6371 * acos(cos(radians(?)) * cos(radians(base_location_latitude)) * cos(radians(base_location_longitude) - radians(?)) + sin(radians(?)) * sin(radians(base_location_latitude)))) <= ?", [$lat, $lng, $lat, $radius]);
+                });
+            }
+
+            $therapists = $query->get();
 
             return response()->json([
                 'therapists' => $therapists

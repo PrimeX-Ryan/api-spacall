@@ -39,6 +39,7 @@ class User extends Authenticatable
         'profile_photo_url',
         'pin_hash',
         'is_verified',
+        'role',
     ];
 
     /**

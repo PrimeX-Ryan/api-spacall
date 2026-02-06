@@ -118,6 +118,7 @@ class AuthController extends Controller
             'date_of_birth' => 'required|date',
             'pin' => 'required|string|size:6',
             'profile_photo' => 'nullable|image|max:2048',
+            'role' => 'nullable|in:client,therapist',
         ]);
 
         if ($validator->fails()) {
@@ -142,9 +143,32 @@ class AuthController extends Controller
                 'gender' => $request->gender,
                 'date_of_birth' => $request->date_of_birth,
                 'pin_hash' => Hash::make($request->pin),
-                'is_verified' => true
+                'is_verified' => true,
+                'role' => $request->role ?? 'client',
             ]
         );
+
+        if ($user->role === 'therapist') {
+            $provider = \App\Models\Provider::firstOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'type' => 'therapist',
+                    'verification_status' => 'pending',
+                    'is_active' => true,
+                    'is_available' => false,
+                    'is_accepting_bookings' => false,
+                ]
+            );
+
+            \App\Models\TherapistProfile::firstOrCreate(
+                ['provider_id' => $provider->id],
+                [
+                    'bio' => 'Awaiting profile completion.',
+                    'years_of_experience' => 0,
+                    'specializations' => [],
+                ]
+            );
+        }
 
         if ($request->hasFile('profile_photo')) {
             $path = $request->file('profile_photo')->store('profile_photos', 'public');
@@ -184,7 +208,9 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user' => $user
+            'user' => $user,
+            'role' => $user->role,
+            'is_provider' => $user->role === 'therapist'
         ]);
     }
 

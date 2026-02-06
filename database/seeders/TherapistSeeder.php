@@ -41,6 +41,7 @@ class TherapistSeeder extends Seeder
                 'date_of_birth' => '1990-01-01',
                 'pin_hash' => Hash::make('123456'),
                 'is_verified' => true,
+                'role' => 'therapist',
             ]);
 
             // Create Provider
@@ -72,6 +73,8 @@ class TherapistSeeder extends Seeder
                 'license_type' => 'Professional',
                 'base_rate' => rand(500, 1500),
                 'service_radius_km' => 10,
+                'base_location_latitude' => 14.5 + (rand(0, 100) / 1000),
+                'base_location_longitude' => 120.9 + (rand(0, 100) / 1000),
                 'base_address' => 'Sample Address ' . ($index + 1),
                 'default_schedule' => [
                     'monday' => ['09:00', '18:00'],
